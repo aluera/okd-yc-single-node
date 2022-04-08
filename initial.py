@@ -74,7 +74,7 @@ def terraform_files(service_account_id: str, folder_id: str):
                     if item.find("\"") != -1:
                         data[index] = f'  folder_id                = "{folder_id}"\n'
                 if item.find("bucket        = ") != -1:
-                    data[index] = f'  bucket        = "{bucket_name}"'
+                    data[index] = f'  bucket        = "{bucket_name}"\n'
             return data
 
         with open("./terraform/main.tf", 'r', encoding='utf8') as main_tf:
