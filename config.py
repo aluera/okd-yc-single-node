@@ -1,6 +1,10 @@
-dns_zone_name = "internal."
+#!/usr/bin/python3
+import time
+
+dns_zone_name = "example."
 cluster_name = "okd"
 master_name = "single-master"
+bucket_name = f"bucket-bootstrap-{cluster_name}-{int(time.time())}"
 master_cpu = 4
 master_ram = 16
 master_type_disk = "network-hdd"

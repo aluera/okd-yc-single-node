@@ -5,9 +5,24 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 
+
 import yaml
 from config import dns_zone_name, cluster_name, master_name, master_cpu, master_ram, master_type_disk, \
-    size_disk_master_node, network_name, image_id, platform_id, scheduling_policy, zone, v4_cidr_blocks, pullSecret
+    size_disk_master_node, network_name, image_id, platform_id, scheduling_policy, zone, v4_cidr_blocks, pullSecret, bucket_name
+
+
+def is_default():
+    try:
+        if 'okd-ignition' in os.listdir() or 'secrets' in os.listdir():
+            clear = os.system("bash clear-all-to-default.sh")
+            if clear == 0:
+                print("Check is default: Success")
+            else:
+                exit("Check is default Failed")
+        else:
+            print("Check is default: Success")
+    except:
+        exit("Something went wrong!")
 
 
 def create_dirs():
@@ -26,7 +41,8 @@ def get_yc_accounts():
         yc_service_account = subprocess.run("yc iam service-account list --format=json", shell=True,
                                             stderr=subprocess.PIPE,
                                             stdout=subprocess.PIPE)
-        yc_service_account_data = json.loads(yc_service_account.stdout.decode("utf8"))
+        yc_service_account_data = json.loads(
+            yc_service_account.stdout.decode("utf8"))
         for item in yc_service_account_data:
             if item['name'] == 'okd4-service-account':
                 service_account_id = item['id']
@@ -57,6 +73,8 @@ def terraform_files(service_account_id: str, folder_id: str):
                 if item.find("folder_id") != -1:
                     if item.find("\"") != -1:
                         data[index] = f'  folder_id                = "{folder_id}"\n'
+                if item.find("bucket        = ") != -1:
+                    data[index] = f'  bucket        = "{bucket_name}"'
             return data
 
         with open("./terraform/main.tf", 'r', encoding='utf8') as main_tf:
@@ -155,6 +173,8 @@ def generate_ignition_files():
 
 def init():
     try:
+        print("Project is default")
+        is_default()
         print("Create directories")
         create_dirs()
         print("Generate ssh keys")
@@ -220,7 +240,8 @@ def add_to_hosts(ip_address: str):
     if index_to_del != 0:
         for item in list(index_to_del)[::-1]:
             hosts_file.pop(item)
-    hosts_file.append(f"{ip_address}\tapi.{cluster_name}.{dns_zone_name[0:-1]}\n")
+    hosts_file.append(
+        f"{ip_address}\tapi.{cluster_name}.{dns_zone_name[0:-1]}\n")
     with open("temp_hosts.txt", 'w', encoding='utf8') as file:
         file.writelines(hosts_file)
     write_hosts = subprocess.run(["sudo su -c 'cat ./temp_hosts.txt > /etc/hosts'"],
@@ -288,7 +309,8 @@ def run_okd(retry=False):
     terraform_plan_func()
     terraform_apply_func()
     # Output Resultats"
-    password_okd = open("../okd-ignition/auth/kubeadmin-password", 'r', encoding='utf8').readline()
+    password_okd = open("../okd-ignition/auth/kubeadmin-password",
+                        'r', encoding='utf8').readline()
     print(f"""
 --------Credentials to Access--------
 ip_address_master: {ip_address_master}
