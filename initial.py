@@ -1,19 +1,27 @@
 #!/usr/bin/python3
+import datetime
 import json
 import os
 import subprocess
 import time
-from datetime import datetime, timedelta
 
-
+import hcl
+import requests
 import yaml
-from config import dns_zone_name, cluster_name, master_name, master_cpu, master_ram, master_type_disk, \
-    size_disk_master_node, network_name, image_id, platform_id, scheduling_policy, zone, v4_cidr_blocks, pullSecret, bucket_name
+
+# Global
+bucket_name = f"bucket-bootstrap-okd4-{int(time.time())}"
+with open("./terraform-conf.tfvars", "r", encoding='utf8') as tfvars_conf:
+    tfvars_conf = hcl.load(tfvars_conf)
+cluster_name = tfvars_conf.get("cluster_name")
+dns_zone_name = tfvars_conf.get("dns_zone_name")
+v4_cidr_blocks = tfvars_conf.get("subnets").get("v4_cidr_blocks")
+pullSecret = tfvars_conf.get("okd_pullSecret")
 
 
-def is_default():
+def is_default() -> None:
     try:
-        if 'okd-ignition' in os.listdir() or 'secrets' in os.listdir():
+        if 'okd-ignition' in os.listdir():
             clear = os.system("bash clear-all-to-default.sh")
             if clear == 0:
                 print("Check is default: Success")
@@ -25,137 +33,94 @@ def is_default():
         exit("Something went wrong!")
 
 
-def create_dirs():
+def create_dirs() -> None:
     try:
-        dirs_to_create = "bin", "okd-ignition", "secrets"
+        dirs_to_create = "okd-ignition"
         for item in dirs_to_create:
-            if os.path.isdir(item) != True:
+            if not os.path.isdir(item):
                 os.mkdir(item)
                 print(f"Directory {item} - created!")
     except:
         exit("Error - create_dirs")
 
 
-def get_yc_accounts():
-    try:
-        yc_service_account = subprocess.run("yc iam service-account list --format=json", shell=True,
-                                            stderr=subprocess.PIPE,
-                                            stdout=subprocess.PIPE)
-        yc_service_account_data = json.loads(
-            yc_service_account.stdout.decode("utf8"))
-        for item in yc_service_account_data:
-            if item['name'] == 'okd4-service-account':
-                service_account_id = item['id']
-                folder_id = item['folder_id']
-                return service_account_id, folder_id
-    except:
-        exit("Error - get_yc_accounts")
-
-
-def get_yc_accounts_key():
-    try:
-        if "key.json" in os.listdir():
-            print("Key already exist!")
+def request_token_iam() -> tuple:
+    def request_meta(meta_data_url):
+        metadata_flavor = {'Metadata-Flavor': 'Google'}
+        data = requests.get(meta_data_url, headers=metadata_flavor)
+        if data.status_code == 200:
+            return data.text
         else:
-            os.system(
-                "yc iam key create --service-account-name=okd4-service-account --algorithm='rsa-4096' -o key.json")
+            exit("Error in request MetaData!")
+
+    metadata_token = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token/"
+    metadata_folderid = "http://169.254.169.254/computeMetadata/v1/yandex/folder-id/"
+    metadata_sshkey = "http://169.254.169.254/computeMetadata/v1/instance/attributes/ssh-keys/"
+    try:
+        iam_token = json.loads(request_meta(
+            metadata_token)).get("access_token")
+        iam_folder_id = request_meta(metadata_folderid)
+        iam_ssh_key = request_meta(metadata_sshkey).split(":")[-1]
+        iam_service_account_id = json.loads(subprocess.run(
+            ["yc compute instance get --format=json `curl -s -H Metadata-Flavor:Google "
+             "169.254.169.254/computeMetadata/v1/instance/id`"],
+            shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE).
+                                            stdout.decode('utf8')).get("service_account_id")
+        return iam_token, iam_folder_id, iam_service_account_id, iam_ssh_key
     except:
-        exit("Error - get_yc_accounts_key")
+        exit("Error in get IAM data.")
 
 
-def terraform_files(service_account_id: str, folder_id: str):
-    if service_account_id != None and folder_id != None:
-        def replace_data(data: list):
-            for index, item in enumerate(data):
-                if item.find("service_account_id") != -1:
-                    if item.find("\"") != -1:
-                        data[index] = f'  service_account_id = "{service_account_id}"\n'
-                if item.find("folder_id") != -1:
-                    if item.find("\"") != -1:
-                        data[index] = f'  folder_id                = "{folder_id}"\n'
-                if item.find("bucket        = ") != -1:
-                    data[index] = f'  bucket        = "{bucket_name}"\n'
-            return data
+def tf_main(iam_token: str, iam_folder_id: str, iam_service_account_id: str) -> None:
+    def update_iam(data: list) -> list:
+        for index, item in enumerate(data):
+            if item.find("service_account_id") != -1:
+                if item.find("\"") != -1:
+                    data[index] = f'  service_account_id = "{iam_service_account_id}"\n'
+            if item.find("folder_id") != -1:
+                if item.find("\"") != -1:
+                    data[index] = f'  folder_id = "{iam_folder_id}"\n'
+            if item.find("bucket        = ") != -1:
+                data[index] = f'  bucket        = "{bucket_name}"\n'
+            if item.find("token") != -1:
+                data[index] = f'  token     = "{iam_token}"\n'
+        return data
 
+    try:
         with open("./terraform/main.tf", 'r', encoding='utf8') as main_tf:
             main_tf_data = main_tf.readlines()
         with open("./terraform/main.tf.without", 'r', encoding='utf8') as main_tf_without:
             main_tf_without_data = main_tf_without.readlines()
         with open("./terraform/main.tf", 'w', encoding='utf8') as main_tf:
-            main_tf.writelines(replace_data(main_tf_data))
+            main_tf.writelines(update_iam(main_tf_data))
         with open("./terraform/main.tf.without", 'w', encoding='utf8') as main_tf_without:
-            main_tf_without.writelines(replace_data(main_tf_without_data))
-        with open("./terraform/terraform.tfvars", 'r', encoding='utf8') as tfvars:
-            tfvars_data = tfvars.readlines()
-        for index, item in enumerate(tfvars_data):
-            if item.find('dns_zone_name') != -1:
-                tfvars_data[index] = f'dns_zone_name         = "{dns_zone_name}"\n'
-            if item.find('cluster_name') != -1:
-                tfvars_data[index] = f'cluster_name          = "{cluster_name}"\n'
-            if item.find('master_name') != -1:
-                tfvars_data[index] = f'master_name           = "{master_name}"\n'
-            if item.find('master_cpu') != -1:
-                tfvars_data[index] = f'master_cpu            = {master_cpu}\n'
-            if item.find('master_ram') != -1:
-                tfvars_data[index] = f'master_ram            = {master_ram}\n'
-            if item.find('master_type_disk') != -1:
-                tfvars_data[index] = f'master_type_disk      = "{master_type_disk}"\n'
-            if item.find('size_disk_master_node') != -1:
-                tfvars_data[index] = f'size_disk_master_node = "{size_disk_master_node}"\n'
-            if item.find('network_name') != -1:
-                tfvars_data[index] = f'network_name          = "{network_name}"\n'
-            if item.find('image_id') != -1:
-                tfvars_data[index] = f'image_id              = "{image_id}"\n'
-            if item.find('platform_id') != -1:
-                tfvars_data[index] = f'platform_id           = "{platform_id}"\n'
-            if item.find('scheduling_policy') != -1:
-                tfvars_data[index] = f'scheduling_policy     = {scheduling_policy}\n'
-            if item.find('zone') != -1:
-                if item.find('dns_zone_name') == -1:
-                    tfvars_data[index] = f'  zone           = "{zone}"\n'
-            if item.find('v4_cidr_blocks') != -1:
-                tfvars_data[index] = f'  v4_cidr_blocks = "{v4_cidr_blocks}"\n'
-        with open("./terraform/terraform.tfvars", 'w', encoding='utf8') as tfvars:
-            tfvars.writelines(tfvars_data)
-        return True
-    exit("Error - terraform_files")
-
-
-def generate_ssh_keys():
-    try:
-        if os.path.isfile("./secrets/id_rsa") == True:
-            print("ssh-key is exist!")
-        else:
-            ssh_keys_gen = os.system('ssh-keygen -f ./secrets/id_rsa -q -N ""')
-            if ssh_keys_gen == 0:
-                print("ssh-keys-done")
+            main_tf_without.writelines(update_iam(main_tf_without_data))
     except:
-        exit("Error generating ssh key.")
+        exit("Error - Terraform config!")
 
 
-def okd_config():
+def okd_config(ssh_key_data: str) -> None:
     try:
         with open("./okd-config/install-config.yaml") as conf:
             install_config = yaml.safe_load(conf)
-        with open("./secrets/id_rsa.pub", 'r') as ssh_key:
-            ssh_key_data = ssh_key.readline().rstrip()
         v4_cidr_ = v4_cidr_blocks.split("/")[0].split('.')
         v4_cidr_[2] = "0"
         v4_cidr_blocks_ = ".".join(v4_cidr_)
+        ssh_key_data = ssh_key_data.replace('\n', '')
         install_config.update({'baseDomain': f'{dns_zone_name[0:-1]}'})
         install_config.update({'networking': {'clusterNetwork': [{'cidr': '10.128.0.0/14', 'hostPrefix': 23}],
                                               'machineNetwork': [{'cidr': f'{v4_cidr_blocks_}/16'}],
                                               'networkType': 'OVNKubernetes', 'serviceNetwork': ['172.30.0.0/16']}})
         install_config.update({'metadata': {'name': f'{cluster_name}'}})
-        install_config.update({'pullSecret': pullSecret})
+        install_config.update({'pullSecret': pullSecret.replace("'", "\"")})
         install_config.update({'sshKey': f'{ssh_key_data}'})
         with open("./okd-config/install-config.yaml", "w") as conf:
             yaml.dump(install_config, conf)
     except:
-        exit("Error - okd_config")
+        exit("Error - OKD config!")
 
 
-def generate_ignition_files():
+def generate_ignition_files() -> None:
     try:
         if len(os.listdir("./okd-config/")) <= 1:
             if os.system('cp ./okd-config/install-config.yaml ./okd-ignition/install-config.yaml') != 0:
@@ -168,33 +133,37 @@ def generate_ignition_files():
         else:
             print("Okd ignitions already exist")
     except:
-        exit("Error - generate_ignition_files")
+        exit("Error - Creating OKD Ignitions!")
 
 
-def init():
+def mv_config() -> None:
+    if os.system("cp terraform-conf.tfvars terraform/terraform.tfvars") != 0:
+        exit("Error on copy")
+
+
+def init() -> None:
     try:
-        print("Project is default")
-        is_default()
-        print("Create directories")
+        iam_token, iam_folder_id, iam_service_account_id, iam_ssh_key = request_token_iam()
+        print("IAM complete!")
+        mv_config()
+        print("Copy conf complete!")
         create_dirs()
-        print("Generate ssh keys")
-        generate_ssh_keys()
-        print("Terraform configs")
-        terraform_files(*get_yc_accounts())
-        print("Generate key")
-        get_yc_accounts_key()
-        print("Change Okd Config")
-        okd_config()
-        print("Generate okd ignitions")
+        print("Create directories complete!")
+        is_default()
+        okd_config(iam_ssh_key)
+        print("Change okd config complete!")
+        tf_main(iam_token, iam_folder_id, iam_service_account_id)
+        print("Modify config complete!")
         generate_ignition_files()
-        print("Terraform init")
+        print("OKD ignition complete!")
         os.system("""cd terraform/ && terraform init""")
+        print("Terraform init complete!")
         print("Initialization complete!")
     except:
         exit("Initialization Error")
 
 
-def terraform_destroy_func():
+def terraform_destroy_func() -> None:
     terraform_destroy = subprocess.run(
         ["terraform destroy -auto-approve"], shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     if terraform_destroy.returncode != 0:
@@ -205,7 +174,7 @@ def terraform_destroy_func():
         print("Destroy success!")
 
 
-def terraform_plan_func():
+def terraform_plan_func() -> None:
     terraform_plan = subprocess.run(
         ["terraform plan"], shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     if terraform_plan.returncode != 0:
@@ -214,7 +183,7 @@ def terraform_plan_func():
     print(terraform_plan.stdout.decode("utf8"))
 
 
-def terraform_apply_func():
+def terraform_apply_func() -> None:
     terraform_apply = subprocess.run(
         ["terraform apply -auto-approve"], shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     if terraform_apply.returncode != 0:
@@ -223,12 +192,12 @@ def terraform_apply_func():
     print(terraform_apply.stdout.decode('utf8'))
 
 
-def terraform_dir():
+def terraform_dir() -> None:
     if os.getcwd().split('/')[-1] != "terraform":
         os.chdir("./terraform")
 
 
-def add_to_hosts(ip_address: str):
+def add_to_hosts(ip_address: str) -> None:
     with open("/etc/hosts") as file:
         hosts_file = file.readlines()
     index_to_del = set()
@@ -259,75 +228,65 @@ def get_ip_address(node_name: str) -> str:
     except:
         terraform_dir()
         terraform_destroy_func()
-        exit("Something went wrong!")
+        exit("Cant't get ip address!")
 
 
-def bootstrapping():
-    bootsrapping_ = os.system(
-        "../bin/openshift-install --dir=../okd-ignition wait-for bootstrap-complete --log-level=debug")
-    if bootsrapping_ != 0:
-        retry_r = open("./terraform.tfvars", encoding='utf8').readlines()
-        retry = json.loads(retry_r[-1].strip("#").replace('\'', '"'))
-        if retry["retry_count"] < retry["max_retry_count"]:
-            retry["retry_count"] += 1
-            retry_r[-1] = f"#{retry}"
-            open("./terraform.tfvars", 'w', encoding='utf8').writelines(retry_r)
-            run_okd(True)
-        else:
-            retry_count_to_default()
-            terraform_destroy_func()
-            exit("OKD FAILED!")
-    else:
-        print("Bootstrapping successfully")
-
-
-def retry_count_to_default():
-    terraform_dir()
-    retry_r = open("./terraform.tfvars", encoding='utf8').readlines()
-    retry_r[-1] = "#{'retry_count': 0, 'max_retry_count': 3}"
-    open("./terraform.tfvars", 'w', encoding='utf8').writelines(retry_r)
-
-
-def run_okd(retry=False):
-    if retry is True:
+def initial_bootstap(is_rety=False) -> None:
+    if is_rety is True:
         terraform_dir()
         terraform_destroy_func()
-    # Initial bootstap
+    wait_time = 10
     terraform_dir()
     terraform_plan_func()
     terraform_apply_func()
     ip_address_master = get_ip_address("master")
     add_to_hosts(ip_address_master)
     print(
-        f"We are waiting for the bootstrap server to be pre-installed in 5 minutes: {(datetime.now() + timedelta(minutes=10)).strftime('%H:%M:%S')}")
-    time.sleep(300)
+        f"We are waiting for the bootstrap server to be pre-installed in {wait_time} "
+        f"minutes: {(datetime.datetime.now() + datetime.timedelta(minutes=wait_time)).strftime('%H:%M:%S')}")
+    time.sleep(wait_time * 60)
+
+
+def bootstrapping(retry=2) -> None:
+    bootstrapping_ = os.system(
+        "../bin/openshift-install --dir=../okd-ignition wait-for bootstrap-complete --log-level=debug")
+    if bootstrapping_ != 0:
+        if retry != 0:
+            retry -= 1
+            initial_bootstap(True)
+            bootstrapping(retry)
+        else:
+            exit("Retry count over!")
+    else:
+        print("Bootstrapping node done!")
+
+
+def run_okd() -> None:
+    initial_bootstap()
     bootstrapping()
-    # Delete bootstrap node and S3
     os.system("mv main.tf main.tf.save")
     os.system("mv main.tf.without main.tf")
     terraform_dir()
     terraform_plan_func()
     terraform_apply_func()
-    # Output Resultats"
     password_okd = open("../okd-ignition/auth/kubeadmin-password",
                         'r', encoding='utf8').readline()
+    ip_address_master = get_ip_address("master")
     print(f"""
 --------Credentials to Access--------
 ip_address_master: {ip_address_master}
 login: kubeadmin
 passowrd: {password_okd}
 --------Login OKD--------
-1. SSH to Master node <example>: ssh -i <use-id_rsa-in-secret-folder> core@{ip_address_master}
+1. SSH to Master node:
+User: core@{ip_address_master}
 2. oc login localhost:6443  --username=kubeadmin --password={password_okd} --insecure-skip-tls-verify=false
-Copy the SSH keys to your machine.
-::::::ADD SOME ROWS TO HOSTS::::::
+:::::Console OKD::::::
 {ip_address_master}\tconsole-openshift-console.apps.{cluster_name}.{dns_zone_name[0:-1]}
 {ip_address_master}\toauth-openshift.apps.{cluster_name}.{dns_zone_name[0:-1]}
 """)
-    # After install
     os.system("mv main.tf main.tf.without")
     os.system("mv main.tf.save main.tf")
-    retry_count_to_default()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 provider "yandex" {
-  service_account_key_file = "../key.json"
-  folder_id                = ""
+  token     = ""
+  folder_id = ""
 }
 
 locals {

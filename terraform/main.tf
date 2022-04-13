@@ -1,6 +1,6 @@
 provider "yandex" {
-  service_account_key_file = "../key.json"
-  folder_id                = ""
+  token     = ""
+  folder_id = ""
 }
 
 locals {
@@ -86,7 +86,7 @@ resource "yandex_iam_service_account_static_access_key" "sa-static-key" {
 }
 
 resource "yandex_storage_bucket" "ignition" {
-  bucket        = "bootstrap-ignition-${var.cluster_name}"
+  bucket        = "bucket-bootstrap-okd4-1649857962"
   force_destroy = true
   grant {
     type        = "Group"

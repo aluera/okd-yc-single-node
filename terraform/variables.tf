@@ -34,13 +34,16 @@ variable "network_description" {
 variable "subnets" {
   description = "A set of key/value label pairs to assign."
   type        = map(string)
-  default     = null
+  default = {
+    zone           = "ru-central1-a"
+    v4_cidr_blocks = "10.88.1.0/24"
+  }
 }
 
 #DNS
 variable "dns_zone_name" {
   type        = string
-  default     = "internal."
+  default     = "example."
   description = "Base domain name"
 }
 
@@ -54,7 +57,11 @@ variable "cluster_name" {
 variable "labels" {
   description = "A set of key/value label pairs to assign."
   type        = map(string)
-  default     = null
+  default = {
+    tag        = "okd",
+    demo       = "false",
+    created_by = "okd-yc-upi"
+  }
 }
 
 # Bootstrap
@@ -104,4 +111,9 @@ variable "size_disk_master_node" {
   type        = string
   description = "Size disk master node"
   default     = "120"
+}
+variable "okd_pullSecret" {
+  type        = string
+  description = "PullSecret okd"
+  default     = "{'auths':{'fake':{'auth': 'bar'}}}"
 }
