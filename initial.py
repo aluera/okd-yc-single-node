@@ -126,7 +126,7 @@ def okd_config(ssh_key_data: str) -> None:
                                               'machineNetwork': [{'cidr': f'{v4_cidr_blocks_}/16'}],
                                               'networkType': 'OVNKubernetes', 'serviceNetwork': ['172.30.0.0/16']}})
         install_config.update({'metadata': {'name': f'{cluster_name}'}})
-        install_config.update({'pullSecret': f"'{pullSecret}'"})
+        install_config.update({'pullSecret': pullSecret})
         install_config.update({'sshKey': f'{ssh_key_data}'})
         with open("./okd-config/install-config.yaml", "w") as conf:
             yaml.dump(install_config, conf)
