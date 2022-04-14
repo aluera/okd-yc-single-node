@@ -8,8 +8,8 @@ variable "folder_id" {
 # Image 
 variable "image_id" {
   type        = string
-  default     = "fd8u9lgdcukfl03sik2n"
-  description = "Fedora CoreOS 34"
+  default     = "fd865udut6b1gvgh5igh"
+  description = "Fedora CoreOS 35"
 }
 
 # Scheduling_policy
