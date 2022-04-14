@@ -26,22 +26,22 @@ def is_default() -> None:
             if clear == 0:
                 print("Check is default: Success")
             else:
-                exit("Check is default Failed")
+                exit("Check is default: Failed")
         else:
             print("Check is default: Success")
     except:
-        exit("Something went wrong!")
+        exit("Clear-all-to-default: Failed")
 
 
-def create_dirs() -> None:
+def create_dir() -> None:
     try:
         dirs_to_create = "okd-ignition"
-        for item in dirs_to_create:
-            if not os.path.isdir(item):
-                os.mkdir(item)
-                print(f"Directory {item} - created!")
+        if not os.path.isdir(dirs_to_create):
+            os.mkdir(dirs_to_create)
+            print(f"Directory {dirs_to_create} - created!")
+
     except:
-        exit("Error - create_dirs")
+        exit("Error - create_dir")
 
 
 def request_token_iam() -> tuple:
