@@ -295,4 +295,4 @@ User: core@{ip_address_master}
 
 if __name__ == "__main__":
     init()
-    #run_okd()
+    run_okd()
