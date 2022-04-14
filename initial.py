@@ -33,13 +33,11 @@ def is_default() -> None:
         exit("Clear-all-to-default: Failed")
 
 
-def create_dir() -> None:
+def create_dirs() -> None:
     try:
-        dirs_to_create = "okd-ignition"
-        if not os.path.isdir(dirs_to_create):
-            os.mkdir(dirs_to_create)
-            print(f"Directory {dirs_to_create} - created!")
-
+        if not os.path.isdir("okd-ignition"):
+            os.mkdir("okd-ignition")
+            print("Directory okd-ignition - created!")
     except:
         exit("Error - create_dir")
 
