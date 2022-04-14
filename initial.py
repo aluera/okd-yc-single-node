@@ -16,7 +16,6 @@ with open("./terraform-conf.tfvars", "r", encoding='utf8') as tfvars_conf:
 cluster_name = tfvars_conf.get("cluster_name")
 dns_zone_name = tfvars_conf.get("dns_zone_name")
 v4_cidr_blocks = tfvars_conf.get("subnets").get("v4_cidr_blocks")
-pullSecret = tfvars_conf.get("okd_pullSecret")
 
 
 def is_default() -> None:
@@ -62,7 +61,7 @@ def request_token_iam() -> tuple:
             ["yc compute instance get --format=json `curl -s -H Metadata-Flavor:Google "
              "169.254.169.254/computeMetadata/v1/instance/id`"],
             shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE).
-                                            stdout.decode('utf8')).get("service_account_id")
+            stdout.decode('utf8')).get("service_account_id")
         return iam_token, iam_folder_id, iam_service_account_id, iam_ssh_key
     except Exception as exc:
         print(exc)
@@ -98,10 +97,26 @@ def tf_main(iam_token: str, iam_folder_id: str, iam_service_account_id: str) -> 
         exit("Terraform config change: Failed")
 
 
+def okd_pull_secret() -> str:
+    with open('okd-pull-secret.txt', 'r', encoding='utf8') as pullSecret_f:
+        pullSecret_f = pullSecret_f.readlines()
+    for item in pullSecret_f:
+        try:
+            pullSecret = json.loads(item)
+            break
+        except:
+            pullSecret = None
+    if pullSecret is not None:
+        return str(pullSecret).replace("'", '"')
+    else:
+        exit("Get pullSecret in okd-pull-secret.txt: Failed")
+
+
 def okd_config(ssh_key_data: str) -> None:
     try:
         with open("./okd-config/install-config.yaml") as conf:
             install_config = yaml.safe_load(conf)
+        pullSecret = okd_pull_secret()
         v4_cidr_ = v4_cidr_blocks.split("/")[0].split('.')
         v4_cidr_[2] = "0"
         v4_cidr_blocks_ = ".".join(v4_cidr_)
@@ -111,7 +126,7 @@ def okd_config(ssh_key_data: str) -> None:
                                               'machineNetwork': [{'cidr': f'{v4_cidr_blocks_}/16'}],
                                               'networkType': 'OVNKubernetes', 'serviceNetwork': ['172.30.0.0/16']}})
         install_config.update({'metadata': {'name': f'{cluster_name}'}})
-        install_config.update({'pullSecret': pullSecret.replace("'", "\"")})
+        install_config.update({'pullSecret': f"'{pullSecret}'"})
         install_config.update({'sshKey': f'{ssh_key_data}'})
         with open("./okd-config/install-config.yaml", "w") as conf:
             yaml.dump(install_config, conf)

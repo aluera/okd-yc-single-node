@@ -112,8 +112,3 @@ variable "size_disk_master_node" {
   description = "Size disk master node"
   default     = "120"
 }
-variable "okd_pullSecret" {
-  type        = string
-  description = "PullSecret okd"
-  default     = "{'auths':{'fake':{'auth': 'bar'}}}"
-}

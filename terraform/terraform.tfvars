@@ -9,7 +9,6 @@ network_name          = "okd_network"
 image_id              = "fd8u9lgdcukfl03sik2n"
 platform_id           = "standard-v3"
 scheduling_policy     = true
-okd_pullSecret        = "{'auths':{'fake':{'auth': 'bar'}}}"
 subnets = {
   zone           = "ru-central1-a"
   v4_cidr_blocks = "10.88.1.0/24"
