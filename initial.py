@@ -23,22 +23,22 @@ def is_default() -> None:
     try:
         if 'okd-ignition' in os.listdir():
             clear = os.system("bash clear-all-to-default.sh")
-            if clear == 0:
-                print("Check is default: Success")
-            else:
-                exit("Check is default: Failed")
         else:
             print("Check is default: Success")
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Clear-all-to-default: Failed")
 
 
-def create_dirs() -> None:
+def create_dir() -> None:
     try:
+        dirs_to_create = "okd-ignition"
         if not os.path.isdir("okd-ignition"):
-            os.mkdir("okd-ignition")
-            print("Directory okd-ignition - created!")
-    except:
+            print("create dir")
+            os.mkdir(dirs_to_create)
+            print(f"Directory {dirs_to_create} - created!")
+    except Exception as exc:
+        print(exc)
         exit("Error - create_dir")
 
 
@@ -65,7 +65,8 @@ def request_token_iam() -> tuple:
             shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE).
                                             stdout.decode('utf8')).get("service_account_id")
         return iam_token, iam_folder_id, iam_service_account_id, iam_ssh_key
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Error in get IAM data.")
 
 
@@ -93,7 +94,8 @@ def tf_main(iam_token: str, iam_folder_id: str, iam_service_account_id: str) -> 
             main_tf.writelines(update_iam(main_tf_data))
         with open("./terraform/main.tf.without", 'w', encoding='utf8') as main_tf_without:
             main_tf_without.writelines(update_iam(main_tf_without_data))
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Error - Terraform config!")
 
 
@@ -114,7 +116,8 @@ def okd_config(ssh_key_data: str) -> None:
         install_config.update({'sshKey': f'{ssh_key_data}'})
         with open("./okd-config/install-config.yaml", "w") as conf:
             yaml.dump(install_config, conf)
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Error - OKD config!")
 
 
@@ -130,7 +133,8 @@ def generate_ignition_files() -> None:
             print('Generate okd config success')
         else:
             print("Okd ignitions already exist")
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Error - Creating OKD Ignitions!")
 
 
@@ -141,13 +145,13 @@ def mv_config() -> None:
 
 def init() -> None:
     try:
+        is_default()
         iam_token, iam_folder_id, iam_service_account_id, iam_ssh_key = request_token_iam()
         print("IAM complete!")
         mv_config()
         print("Copy conf complete!")
-        create_dirs()
+        create_dir()
         print("Create directories complete!")
-        is_default()
         okd_config(iam_ssh_key)
         print("Change okd config complete!")
         tf_main(iam_token, iam_folder_id, iam_service_account_id)
@@ -157,7 +161,8 @@ def init() -> None:
         os.system("""cd terraform/ && terraform init""")
         print("Terraform init complete!")
         print("Initialization complete!")
-    except:
+    except Exception as exc:
+        print(exc)
         exit("Initialization Error")
 
 
@@ -223,7 +228,8 @@ def get_ip_address(node_name: str) -> str:
             json_data = json.load(file)
         ipv4_node = json_data["outputs"][f"{node_name}-ip-nat"]["value"]
         return ipv4_node
-    except:
+    except Exception as exc:
+        print(exc)
         terraform_dir()
         terraform_destroy_func()
         exit("Cant't get ip address!")
@@ -289,4 +295,4 @@ User: core@{ip_address_master}
 
 if __name__ == "__main__":
     init()
-    run_okd()
+    #run_okd()
