@@ -303,7 +303,7 @@ def run_okd() -> None:
 --------Credentials to Access--------
 ip_address_master: {ip_address_master}
 login: kubeadmin
-passowrd: {password_okd}
+password: {password_okd}
 --------Login OKD--------
 1. SSH to Master node:
 User: core@{ip_address_master}
