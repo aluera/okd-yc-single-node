@@ -1,6 +1,6 @@
 # Deployment of OKD SINGLE NODE in the Yandex cloud
 <ol>
-<li>Создать виртуальную машину в Compute Cloud Fedora 34/35 и подключить к этой виртуальной машине созданный сервис аккаунт c правами 
+<li>Создать виртуальную машину в Compute Cloud Fedora 34/35 и подключить к этой виртуальной машине созданный сервис аккаунт c правами:
 <pre><code>editor, storage.admin </code></pre></li></li>
 <li>Склонировать к себе гит репозиторий:</li>
 <pre><code>git clone https://github.com/aluera/okd-yc-single-node.git</code></pre>
