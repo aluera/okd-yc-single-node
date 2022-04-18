@@ -12,8 +12,8 @@ import requests
 import yaml
 
 # Default dir
-default_dir = ""
-tf_dir = ""
+default_dir = "/opt/okd-yc-single-node"
+tf_dir = "/opt/okd-yc-single-node/terraform"
 # Global
 bucket_name = f"bucket-bootstrap-okd4-{int(time.time())}"
 with open(f"{default_dir}/terraform-conf.tfvars", "r", encoding='utf8') as tfvars_conf:
